@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מנתח לידים - Leads Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-light: #dbeafe;
+            --success: #16a34a;
+            --success-light: #dcfce7;
+            --danger: #dc2626;
+            --danger-light: #fee2e2;
+            --warning: #f59e0b;
+            --warning-light: #fef3c7;
+            --purple: #7c3aed;
+            --purple-light: #ede9fe;
+            --bg: #f1f5f9;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-lg: 0 4px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+            --radius: 8px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            direction: rtl;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .header h1 { font-size: 22px; font-weight: 700; }
+        .header .subtitle { font-size: 13px; opacity: 0.85; }
+
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+
+        /* Upload Area */
+        .upload-area {
+            background: var(--card);
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 48px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+        }
+        .upload-area:hover, .upload-area.drag-over {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+        .upload-area h2 { margin-bottom: 8px; color: var(--text); }
+        .upload-area p { color: var(--text-secondary); font-size: 14px; }
+        .upload-area input { display: none; }
+        .upload-icon { font-size: 48px; margin-bottom: 12px; }
+
+        /* Filter Panel */
+        .filter-panel {
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+            overflow: visible;
+        }
+        .filter-header {
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            background: #f8fafc;
+            border-bottom: 1px solid var(--border);
+            border-radius: var(--radius) var(--radius) 0 0;
+            user-select: none;
+        }
+        .filter-header h3 { font-size: 15px; }
+        .filter-header .toggle { font-size: 18px; transition: transform 0.2s; }
+        .filter-header .toggle.collapsed { transform: rotate(180deg); }
+        .filter-body { padding: 16px 20px; }
+        .filter-body.collapsed { display: none; }
+        .date-filter-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .date-filter-row label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        .filters-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+        .filter-actions {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .filter-group { position: relative; }
+        .filter-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        /* Custom Multi-Select */
+        .multi-select-btn {
+            width: 100%;
+            padding: 7px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+            min-height: 36px;
+        }
+        .multi-select-btn:hover { border-color: var(--primary); }
+        .multi-select-btn .count {
+            background: var(--primary);
+            color: white;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .multi-select-btn .arrow { font-size: 10px; color: var(--text-secondary); }
+
+        .ms-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            left: 0;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: var(--shadow-lg);
+            z-index: 1000;
+            max-height: 340px;
+            display: flex;
+            flex-direction: column;
+            margin-top: 2px;
+        }
+        .ms-dropdown.hidden { display: none; }
+        .ms-search {
+            padding: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .ms-search input {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 13px;
+            outline: none;
+        }
+        .ms-search input:focus { border-color: var(--primary); }
+        .ms-actions {
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .ms-actions a {
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .ms-actions a:hover { text-decoration: underline; }
+        .ms-options {
+            overflow-y: auto;
+            flex: 1;
+        }
+        .ms-option {
+            padding: 6px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .ms-option:hover { background: var(--primary-light); }
+        .ms-option input { cursor: pointer; accent-color: var(--primary); }
+        .ms-option.hidden { display: none; }
+
+        /* Toggle Buttons */
+        .toggle-group {
+            display: flex;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .toggle-btn {
+            flex: 1;
+            padding: 6px 10px;
+            font-size: 12px;
+            border: none;
+            background: white;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+            border-left: 1px solid var(--border);
+        }
+        .toggle-btn:first-child { border-left: none; }
+        .toggle-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* Date filter */
+        .date-inputs { display: flex; gap: 8px; }
+        .date-inputs select, .date-inputs input {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            background: white;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-secondary { background: #e2e8f0; color: var(--text); }
+        .btn-secondary:hover { background: #cbd5e1; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #15803d; }
+
+        .active-filters {
+            padding: 8px 20px;
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: #fefce8;
+            display: none;
+        }
+        .active-filters.visible { display: block; }
+        .active-filters .tag {
+            display: inline-block;
+            background: var(--primary-light);
+            color: var(--primary);
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 2px;
+            font-size: 11px;
+        }
+
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+            border-right: 4px solid var(--primary);
+        }
+        .kpi-card.green { border-right-color: var(--success); }
+        .kpi-card.red { border-right-color: var(--danger); }
+        .kpi-card.yellow { border-right-color: var(--warning); }
+        .kpi-card.purple { border-right-color: var(--purple); }
+        .kpi-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 600; }
+        .kpi-value { font-size: 26px; font-weight: 800; }
+        .kpi-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+            border-bottom: 2px solid var(--border);
+            background: var(--card);
+            border-radius: var(--radius) var(--radius) 0 0;
+            padding: 0 16px;
+        }
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.15s;
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .tab-content {
+            background: var(--card);
+            border-radius: 0 0 var(--radius) var(--radius);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .tab-content.active { display: block; }
+
+        /* Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        .chart-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+        }
+        .chart-card h4 { margin-bottom: 12px; font-size: 14px; }
+
+        /* Tables */
+        .table-wrapper { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            background: #f8fafc;
+            padding: 10px 12px;
+            text-align: right;
+            font-weight: 700;
+            border-bottom: 2px solid var(--border);
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+        th:hover { background: #e2e8f0; }
+        th .sort-icon { font-size: 10px; margin-right: 4px; opacity: 0.5; }
+        th.sorted .sort-icon { opacity: 1; color: var(--primary); }
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        tr:hover td { background: #f8fafc; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .status-arrived { background: var(--success-light); color: var(--success); }
+        .status-purchased { background: #d1fae5; color: #065f46; }
+        .status-cancelled { background: var(--danger-light); color: var(--danger); }
+        .status-noshow { background: var(--warning-light); color: #92400e; }
+
+        /* Breakdown section */
+        .breakdown-section { margin-bottom: 24px; }
+        .breakdown-section h4 {
+            font-size: 15px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--primary);
+            display: inline-block;
+        }
+
+        /* Data table extras */
+        .data-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .search-box {
+            padding: 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            width: 300px;
+            max-width: 100%;
+        }
+        .search-box:focus { outline: none; border-color: var(--primary); }
+
+        .data-count { font-size: 13px; color: var(--text-secondary); }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 16px;
+        }
+        .pagination button {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .pagination button:hover { background: var(--primary-light); }
+        .pagination button.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        .spinner {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #app-content { display: none; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { padding: 12px; }
+            .filter-body { grid-template-columns: 1fr 1fr; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+
+        /* Export button styling */
+        .export-section {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .highlight-row td { background: #fefce8 !important; }
+
+        /* Tooltip */
+        .info-tip {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            background: var(--text-secondary);
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            font-size: 10px;
+            line-height: 16px;
+            cursor: help;
+            margin-right: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>מנתח לידים</h1>
+            <div class="subtitle">ניתוח מדויק של נתוני לידים, קמפיינים וסניפים</div>
+        </div>
+        <div id="file-info" style="font-size:13px; opacity:0.8;"></div>
+    </div>
+
+    <div class="container">
+        <!-- Upload -->
+        <div class="upload-area" id="upload-area">
+            <div class="upload-icon">📊</div>
+            <h2>גרור קובץ CSV לכאן</h2>
+            <p>או לחץ כדי לבחור קובץ &bull; תומך בקבצי CSV עם כותרות בעברית</p>
+            <input type="file" id="file-input" accept=".csv,.txt">
+        </div>
+
+        <div id="app-content">
+            <!-- Filter Panel -->
+            <div class="filter-panel">
+                <div class="filter-header" id="filter-toggle">
+                    <h3>סינון נתונים</h3>
+                    <span class="toggle" id="filter-arrow">&#9650;</span>
+                </div>
+                <div class="filter-body" id="filter-body">
+                    <!-- Date Filter - separate row -->
+                    <div class="date-filter-row">
+                        <label>סינון לפי תאריך:</label>
+                        <select id="date-field-select" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; background:white;">
+                            <option value="schedulingDate">תאריך קביעה</option>
+                            <option value="examDate">תאריך בדיקה</option>
+                        </select>
+                        <div class="toggle-group">
+                            <button class="toggle-btn" data-filter="dateMode" data-value="day" onclick="switchDateMode('day')">יום</button>
+                            <button class="toggle-btn active" data-filter="dateMode" data-value="month" onclick="switchDateMode('month')">חודש</button>
+                        </div>
+                        <label>מ:</label>
+                        <input type="month" id="date-from" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; width:150px;">
+                        <input type="date" id="date-from-day" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; width:150px; display:none;">
+                        <label>עד:</label>
+                        <input type="month" id="date-to" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; width:150px;">
+                        <input type="date" id="date-to-day" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; width:150px; display:none;">
+                    </div>
+
+                    <!-- Multi-select filters grid -->
+                    <div class="filters-grid">
+                    <div class="filter-group">
+                        <label>סניף</label>
+                        <div id="filter-branch"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>מטפל</label>
+                        <div id="filter-handler"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>סטטוס</label>
+                        <div id="filter-status"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>אופטומטריסט</label>
+                        <div id="filter-optometrist"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>סוג בדיקה</label>
+                        <div id="filter-examType"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>מקור בדיקה</label>
+                        <div id="filter-examSource"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>מקור (פלטפורמה)</label>
+                        <div id="filter-source"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>מדיה</label>
+                        <div id="filter-media"></div>
+                    </div>
+                    <div class="filter-group" style="grid-column: span 2;">
+                        <label>קמפיין</label>
+                        <div id="filter-campaign"></div>
+                    </div>
+
+                    <!-- Toggles -->
+                    <div class="filter-group">
+                        <label>דובר רוסית</label>
+                        <div class="toggle-group">
+                            <button class="toggle-btn active" data-filter="russian" data-value="all">הכל</button>
+                            <button class="toggle-btn" data-filter="russian" data-value="yes">כן</button>
+                            <button class="toggle-btn" data-filter="russian" data-value="no">לא</button>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>חייל</label>
+                        <div class="toggle-group">
+                            <button class="toggle-btn active" data-filter="soldier" data-value="all">הכל</button>
+                            <button class="toggle-btn" data-filter="soldier" data-value="yes">כן</button>
+                            <button class="toggle-btn" data-filter="soldier" data-value="no">לא</button>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label>לקוח חוזר</label>
+                        <div class="toggle-group">
+                            <button class="toggle-btn active" data-filter="returning" data-value="all">הכל</button>
+                            <button class="toggle-btn" data-filter="returning" data-value="yes">כן</button>
+                            <button class="toggle-btn" data-filter="returning" data-value="no">לא</button>
+                        </div>
+                    </div>
+                    </div><!-- end filters-grid -->
+                </div>
+                <div class="filter-actions">
+                    <button class="btn btn-primary" onclick="applyFilters()">החל סינון</button>
+                    <button class="btn btn-secondary" onclick="resetFilters()">אפס הכל</button>
+                    <span id="results-count" style="font-size:13px; color:var(--text-secondary); margin-right:auto;"></span>
+                </div>
+                <div class="active-filters" id="active-filters"></div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="kpi-grid" id="kpi-grid"></div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <div class="tab active" data-tab="overview" onclick="switchTab('overview')">סקירה כללית</div>
+                <div class="tab" data-tab="breakdowns" onclick="switchTab('breakdowns')">פילוחים</div>
+                <div class="tab" data-tab="campaigns" onclick="switchTab('campaigns')">קמפיינים</div>
+                <div class="tab" data-tab="data" onclick="switchTab('data')">טבלת נתונים</div>
+            </div>
+
+            <!-- Overview Tab -->
+            <div class="tab-content active" id="tab-overview">
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h4>התפלגות סטטוסים</h4>
+                        <canvas id="chart-status"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h4>לידים לפי סניף</h4>
+                        <canvas id="chart-branch"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h4>לידים לפי מקור</h4>
+                        <canvas id="chart-source"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h4>מגמת לידים חודשית (לפי תאריך קביעה)</h4>
+                        <canvas id="chart-monthly"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Breakdowns Tab -->
+            <div class="tab-content" id="tab-breakdowns">
+                <div class="breakdown-section">
+                    <h4>פילוח לפי מטפל</h4>
+                    <div class="table-wrapper" id="breakdown-handler"></div>
+                </div>
+                <div class="breakdown-section">
+                    <h4>פילוח לפי סניף</h4>
+                    <div class="table-wrapper" id="breakdown-branch"></div>
+                </div>
+                <div class="breakdown-section">
+                    <h4>פילוח לפי מקור</h4>
+                    <div class="table-wrapper" id="breakdown-source"></div>
+                </div>
+                <div class="breakdown-section">
+                    <h4>פילוח לפי אופטומטריסט</h4>
+                    <div class="table-wrapper" id="breakdown-optometrist"></div>
+                </div>
+            </div>
+
+            <!-- Campaigns Tab -->
+            <div class="tab-content" id="tab-campaigns">
+                <div class="breakdown-section">
+                    <h4>ביצועי קמפיינים</h4>
+                    <div class="data-toolbar">
+                        <input type="text" class="search-box" id="campaign-search" placeholder="חפש קמפיין..." oninput="renderCampaignBreakdown()">
+                        <button class="btn btn-success" onclick="exportCampaignsExcel()">ייצוא Excel</button>
+                    </div>
+                    <div class="table-wrapper" id="breakdown-campaign"></div>
+                </div>
+            </div>
+
+            <!-- Data Tab -->
+            <div class="tab-content" id="tab-data">
+                <div class="data-toolbar">
+                    <input type="text" class="search-box" id="data-search" placeholder="חיפוש חופשי בכל השדות..." oninput="renderDataTable()">
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <span class="data-count" id="data-count"></span>
+                        <button class="btn btn-success" onclick="exportExcel()">ייצוא Excel</button>
+                        <button class="btn btn-secondary" onclick="exportCSV()">ייצוא CSV</button>
+                    </div>
+                </div>
+                <div class="table-wrapper" id="data-table"></div>
+                <div class="pagination" id="pagination"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ========================================
+    // GLOBAL STATE
+    // ========================================
+    let processedData = [];
+    let filteredData = [];
+    let charts = {};
+    let multiSelects = {};
+    let toggleFilters = { russian: 'all', soldier: 'all', returning: 'all' };
+    let dataPage = 1;
+    const DATA_PER_PAGE = 100;
+    let dataSortCol = null;
+    let dataSortDir = 'asc';
+
+    // ========================================
+    // CSV PARSING
+    // ========================================
+    function parseDate(dateStr) {
+        if (!dateStr || !dateStr.trim()) return null;
+        const s = dateStr.trim();
+        const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/);
+        if (!m) return null;
+        return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]), parseInt(m[4]), parseInt(m[5]), parseInt(m[6]));
+    }
+
+    function cleanStr(s) {
+        if (!s) return '';
+        return s.trim();
+    }
+
+    function processRow(row) {
+        const examDate = parseDate(row['תאריך בדיקה']);
+        const schedulingDate = parseDate(row['תאריך קביעה']);
+        return {
+            id: cleanStr(row['#']),
+            examDate: examDate,
+            examDateStr: cleanStr(row['תאריך בדיקה']),
+            schedulingDate: schedulingDate,
+            schedulingDateStr: cleanStr(row['תאריך קביעה']),
+            schedulingMonth: schedulingDate ? schedulingDate.getMonth() + 1 : null,
+            schedulingYear: schedulingDate ? schedulingDate.getFullYear() : null,
+            examMonth: examDate ? examDate.getMonth() + 1 : null,
+            examYear: examDate ? examDate.getFullYear() : null,
+            returningCustomer: cleanStr(row['לקוח חוזר']) === 'כן',
+            customerName: cleanStr(row['שם הלקוח']),
+            status: cleanStr(row['סטטוס']),
+            reason: cleanStr(row['סיבה']),
+            newStatus: cleanStr(row['סטטוס חדש']),
+            examSource: cleanStr(row['מקור בדיקה']),
+            transactionAmount: parseFloat(cleanStr(row['סכום העסקה'])) || 0,
+            orders: cleanStr(row['הזמנות']),
+            branch: cleanStr(row['סניף']),
+            optometrist: cleanStr(row['אופטימטריסט']),
+            cancelAssignment: cleanStr(row['ביטול שיוך']),
+            examType: cleanStr(row['סוג בדיקה']),
+            campaign: cleanStr(row['קמפיין']),
+            media: cleanStr(row['מדיה']),
+            source: cleanStr(row['מקור']),
+            soldier: cleanStr(row['חייל']) === 'כן',
+            russian: cleanStr(row['רוסי']) === 'כן',
+            handler: cleanStr(row['מטפל']),
+            time: cleanStr(row['זמן']),
+        };
+    }
+
+    // ========================================
+    // STATUS HELPERS
+    // ========================================
+    function isArrived(status) {
+        return status === 'הגיע ורכש' || status === 'הגיע ולא רכש';
+    }
+    function isPurchased(status) {
+        return status === 'הגיע ורכש';
+    }
+    function isArrivedNotPurchased(status) {
+        return status === 'הגיע ולא רכש';
+    }
+    function isCancelled(status) {
+        return status && (status.startsWith('ביטול'));
+    }
+    function isCancelledBySeller(status) {
+        return status === 'ביטול מוכרן';
+    }
+    function isCancelledByCustomer(status) {
+        return status === 'ביטול לקוח';
+    }
+    function isNoShow(status) {
+        return status && status.startsWith('לא הגיע');
+    }
+
+    function getStatusClass(status) {
+        if (isPurchased(status)) return 'status-purchased';
+        if (isArrivedNotPurchased(status)) return 'status-arrived';
+        if (isCancelled(status)) return 'status-cancelled';
+        if (isNoShow(status)) return 'status-noshow';
+        return '';
+    }
+
+    // ========================================
+    // MULTI-SELECT COMPONENT
+    // ========================================
+    class MultiSelect {
+        constructor(containerId, placeholder) {
+            this.container = document.getElementById(containerId);
+            this.placeholder = placeholder || 'בחר...';
+            this.options = [];
+            this.selected = new Set();
+            this.isOpen = false;
+            this.searchText = '';
+            this.id = containerId;
+            this.render();
+        }
+
+        setOptions(options) {
+            this.options = [...new Set(options.filter(o => o !== ''))].sort((a, b) => a.localeCompare(b, 'he'));
+            this.selected = new Set(this.options);
+            this.updateButton();
+        }
+
+        getSelected() {
+            return this.selected;
+        }
+
+        isAllSelected() {
+            return this.selected.size === this.options.length;
+        }
+
+        render() {
+            this.container.innerHTML = '';
+            // Button
+            this.btn = document.createElement('div');
+            this.btn.className = 'multi-select-btn';
+            this.btn.onclick = (e) => { e.stopPropagation(); this.toggle(); };
+            this.container.appendChild(this.btn);
+
+            // Dropdown
+            this.dropdown = document.createElement('div');
+            this.dropdown.className = 'ms-dropdown hidden';
+            this.dropdown.onclick = (e) => e.stopPropagation();
+
+            // Search
+            const searchDiv = document.createElement('div');
+            searchDiv.className = 'ms-search';
+            const searchInput = document.createElement('input');
+            searchInput.placeholder = 'חפש...';
+            searchInput.oninput = (e) => { this.searchText = e.target.value; this.filterOptions(); };
+            searchDiv.appendChild(searchInput);
+            this.dropdown.appendChild(searchDiv);
+
+            // Actions
+            const actDiv = document.createElement('div');
+            actDiv.className = 'ms-actions';
+            const selectAll = document.createElement('a');
+            selectAll.textContent = 'בחר הכל';
+            selectAll.onclick = () => this.selectAll();
+            const clearAll = document.createElement('a');
+            clearAll.textContent = 'נקה הכל';
+            clearAll.onclick = () => this.clearAll();
+            actDiv.appendChild(selectAll);
+            actDiv.appendChild(clearAll);
+            this.dropdown.appendChild(actDiv);
+
+            // Options container
+            this.optionsContainer = document.createElement('div');
+            this.optionsContainer.className = 'ms-options';
+            this.dropdown.appendChild(this.optionsContainer);
+
+            this.container.appendChild(this.dropdown);
+            this.updateButton();
+        }
+
+        renderOptions() {
+            this.optionsContainer.innerHTML = '';
+            this.options.forEach(opt => {
+                const div = document.createElement('div');
+                div.className = 'ms-option';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = this.selected.has(opt);
+                cb.onchange = () => {
+                    if (cb.checked) this.selected.add(opt);
+                    else this.selected.delete(opt);
+                    this.updateButton();
+                };
+                const label = document.createElement('span');
+                label.textContent = opt || '(ריק)';
+                div.appendChild(cb);
+                div.appendChild(label);
+                div.onclick = (e) => {
+                    if (e.target !== cb) {
+                        cb.checked = !cb.checked;
+                        cb.onchange();
+                    }
+                };
+                div.dataset.value = opt.toLowerCase();
+                this.optionsContainer.appendChild(div);
+            });
+        }
+
+        filterOptions() {
+            const q = this.searchText.toLowerCase();
+            this.optionsContainer.querySelectorAll('.ms-option').forEach(div => {
+                div.classList.toggle('hidden', q && !div.dataset.value.includes(q));
+            });
+        }
+
+        selectAll() {
+            this.selected = new Set(this.options);
+            this.optionsContainer.querySelectorAll('input').forEach(cb => cb.checked = true);
+            this.updateButton();
+        }
+
+        clearAll() {
+            this.selected.clear();
+            this.optionsContainer.querySelectorAll('input').forEach(cb => cb.checked = false);
+            this.updateButton();
+        }
+
+        toggle() {
+            if (this.isOpen) { this.close(); }
+            else { this.open(); }
+        }
+
+        open() {
+            // Close all other dropdowns first
+            Object.values(multiSelects).forEach(ms => { if (ms !== this && ms.isOpen) ms.close(); });
+            this.renderOptions();
+            this.dropdown.classList.remove('hidden');
+            this.isOpen = true;
+        }
+
+        close() {
+            this.dropdown.classList.add('hidden');
+            this.isOpen = false;
+            this.searchText = '';
+        }
+
+        updateButton() {
+            const total = this.options.length;
+            const sel = this.selected.size;
+            if (sel === 0) {
+                this.btn.innerHTML = `<span style="color:var(--text-secondary)">לא נבחר</span><span class="arrow">&#9660;</span>`;
+            } else if (sel === total) {
+                this.btn.innerHTML = `<span>הכל (${total})</span><span class="arrow">&#9660;</span>`;
+            } else {
+                this.btn.innerHTML = `<span class="count">${sel} / ${total}</span><span class="arrow">&#9660;</span>`;
+            }
+        }
+    }
+
+    // Close dropdowns on outside click
+    document.addEventListener('click', () => {
+        Object.values(multiSelects).forEach(ms => ms.close());
+    });
+
+    // ========================================
+    // FILTER LOGIC
+    // ========================================
+    let dateMode = 'month';
+
+    function switchDateMode(mode) {
+        dateMode = mode;
+        document.querySelectorAll('[data-filter="dateMode"]').forEach(b => b.classList.toggle('active', b.dataset.value === mode));
+        document.getElementById('date-from').style.display = mode === 'month' ? '' : 'none';
+        document.getElementById('date-to').style.display = mode === 'month' ? '' : 'none';
+        document.getElementById('date-from-day').style.display = mode === 'day' ? '' : 'none';
+        document.getElementById('date-to-day').style.display = mode === 'day' ? '' : 'none';
+    }
+
+    function applyFilters() {
+        const dateField = document.getElementById('date-field-select').value;
+
+        let fromDate = null, toDate = null;
+        if (dateMode === 'month') {
+            const dateFrom = document.getElementById('date-from').value;
+            const dateTo = document.getElementById('date-to').value;
+            if (dateFrom) {
+                const [y, m] = dateFrom.split('-').map(Number);
+                fromDate = new Date(y, m - 1, 1);
+            }
+            if (dateTo) {
+                const [y, m] = dateTo.split('-').map(Number);
+                toDate = new Date(y, m, 0, 23, 59, 59); // last day of month
+            }
+        } else {
+            const dateFrom = document.getElementById('date-from-day').value;
+            const dateTo = document.getElementById('date-to-day').value;
+            if (dateFrom) {
+                const [y, m, d] = dateFrom.split('-').map(Number);
+                fromDate = new Date(y, m - 1, d, 0, 0, 0);
+            }
+            if (dateTo) {
+                const [y, m, d] = dateTo.split('-').map(Number);
+                toDate = new Date(y, m - 1, d, 23, 59, 59);
+            }
+        }
+
+        const branchSel = multiSelects['filter-branch'].getSelected();
+        const handlerSel = multiSelects['filter-handler'].getSelected();
+        const statusSel = multiSelects['filter-status'].getSelected();
+        const optSel = multiSelects['filter-optometrist'].getSelected();
+        const examTypeSel = multiSelects['filter-examType'].getSelected();
+        const examSourceSel = multiSelects['filter-examSource'].getSelected();
+        const sourceSel = multiSelects['filter-source'].getSelected();
+        const mediaSel = multiSelects['filter-media'].getSelected();
+        const campaignSel = multiSelects['filter-campaign'].getSelected();
+
+        filteredData = processedData.filter(row => {
+            // Date filter
+            const d = row[dateField];
+            if (fromDate && d && d < fromDate) return false;
+            if (toDate && d && d > toDate) return false;
+            if ((fromDate || toDate) && !d) return false;
+
+            // Multi-select filters
+            if (!branchSel.has(row.branch) && row.branch !== '') return false;
+            if (row.branch === '' && !multiSelects['filter-branch'].isAllSelected()) return false;
+
+            if (!handlerSel.has(row.handler) && row.handler !== '') return false;
+            if (row.handler === '' && !multiSelects['filter-handler'].isAllSelected()) return false;
+
+            if (!statusSel.has(row.status)) return false;
+
+            if (!optSel.has(row.optometrist) && row.optometrist !== '') return false;
+            if (row.optometrist === '' && !multiSelects['filter-optometrist'].isAllSelected()) return false;
+
+            if (!examTypeSel.has(row.examType) && row.examType !== '') return false;
+            if (row.examType === '' && !multiSelects['filter-examType'].isAllSelected()) return false;
+
+            if (!examSourceSel.has(row.examSource) && row.examSource !== '') return false;
+            if (row.examSource === '' && !multiSelects['filter-examSource'].isAllSelected()) return false;
+
+            if (!sourceSel.has(row.source) && row.source !== '') return false;
+            if (row.source === '' && !multiSelects['filter-source'].isAllSelected()) return false;
+
+            if (!mediaSel.has(row.media) && row.media !== '') return false;
+            if (row.media === '' && !multiSelects['filter-media'].isAllSelected()) return false;
+
+            if (!campaignSel.has(row.campaign) && row.campaign !== '') return false;
+            if (row.campaign === '' && !multiSelects['filter-campaign'].isAllSelected()) return false;
+
+            // Toggle filters
+            if (toggleFilters.russian === 'yes' && !row.russian) return false;
+            if (toggleFilters.russian === 'no' && row.russian) return false;
+            if (toggleFilters.soldier === 'yes' && !row.soldier) return false;
+            if (toggleFilters.soldier === 'no' && row.soldier) return false;
+            if (toggleFilters.returning === 'yes' && !row.returningCustomer) return false;
+            if (toggleFilters.returning === 'no' && row.returningCustomer) return false;
+
+            return true;
+        });
+
+        dataPage = 1;
+        updateActiveFiltersDisplay();
+        renderAll();
+    }
+
+    function resetFilters() {
+        document.getElementById('date-from').value = '';
+        document.getElementById('date-to').value = '';
+        document.getElementById('date-from-day').value = '';
+        document.getElementById('date-to-day').value = '';
+        document.getElementById('date-field-select').value = 'schedulingDate';
+        switchDateMode('month');
+
+        Object.values(multiSelects).forEach(ms => ms.selectAll());
+
+        toggleFilters = { russian: 'all', soldier: 'all', returning: 'all' };
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.value === 'all');
+        });
+
+        applyFilters();
+    }
+
+    function updateActiveFiltersDisplay() {
+        const el = document.getElementById('active-filters');
+        const parts = [];
+        const dateFrom = dateMode === 'month' ? document.getElementById('date-from').value : document.getElementById('date-from-day').value;
+        const dateTo = dateMode === 'month' ? document.getElementById('date-to').value : document.getElementById('date-to-day').value;
+        if (dateFrom || dateTo) {
+            const field = document.getElementById('date-field-select').value === 'schedulingDate' ? 'תאריך קביעה' : 'תאריך בדיקה';
+            parts.push(`${field}: ${dateFrom || '...'} עד ${dateTo || '...'}`);
+        }
+        ['filter-branch','filter-handler','filter-status','filter-optometrist','filter-examType','filter-examSource','filter-source','filter-media','filter-campaign'].forEach(id => {
+            const ms = multiSelects[id];
+            if (ms && !ms.isAllSelected() && ms.getSelected().size > 0) {
+                const label = ms.container.closest('.filter-group')?.querySelector('label')?.textContent || id;
+                if (ms.getSelected().size <= 3) {
+                    parts.push(`${label}: ${[...ms.getSelected()].join(', ')}`);
+                } else {
+                    parts.push(`${label}: ${ms.getSelected().size} נבחרו`);
+                }
+            }
+        });
+        if (toggleFilters.russian !== 'all') parts.push(`רוסי: ${toggleFilters.russian === 'yes' ? 'כן' : 'לא'}`);
+        if (toggleFilters.soldier !== 'all') parts.push(`חייל: ${toggleFilters.soldier === 'yes' ? 'כן' : 'לא'}`);
+        if (toggleFilters.returning !== 'all') parts.push(`לקוח חוזר: ${toggleFilters.returning === 'yes' ? 'כן' : 'לא'}`);
+
+        if (parts.length > 0) {
+            el.innerHTML = '<strong>פילטרים פעילים: </strong>' + parts.map(p => `<span class="tag">${p}</span>`).join('');
+            el.classList.add('visible');
+        } else {
+            el.classList.remove('visible');
+        }
+
+        document.getElementById('results-count').textContent = `${filteredData.length.toLocaleString()} תוצאות מתוך ${processedData.length.toLocaleString()}`;
+    }
+
+    // ========================================
+    // STATISTICS CALCULATION
+    // ========================================
+    function calcStats(data) {
+        const total = data.length;
+        const arrived = data.filter(r => isArrived(r.status)).length;
+        const purchased = data.filter(r => isPurchased(r.status)).length;
+        const arrivedNotPurchased = data.filter(r => isArrivedNotPurchased(r.status)).length;
+        const cancelled = data.filter(r => isCancelled(r.status)).length;
+        const cancelledBySeller = data.filter(r => isCancelledBySeller(r.status)).length;
+        const cancelledByCustomer = data.filter(r => isCancelledByCustomer(r.status)).length;
+        const noShow = data.filter(r => isNoShow(r.status)).length;
+        const revenue = data.reduce((sum, r) => sum + r.transactionAmount, 0);
+        const avgTransaction = purchased > 0 ? revenue / purchased : 0;
+        const arrivalRate = total > 0 ? (arrived / total * 100) : 0;
+        const purchaseRate = arrived > 0 ? (purchased / arrived * 100) : 0;
+        const overallConversion = total > 0 ? (purchased / total * 100) : 0;
+        const russian = data.filter(r => r.russian).length;
+        const soldiers = data.filter(r => r.soldier).length;
+        const returning = data.filter(r => r.returningCustomer).length;
+
+        return {
+            total, arrived, purchased, arrivedNotPurchased, cancelled,
+            cancelledBySeller, cancelledByCustomer, noShow, revenue,
+            avgTransaction, arrivalRate, purchaseRate, overallConversion,
+            russian, soldiers, returning
+        };
+    }
+
+    function groupBy(data, key) {
+        const groups = {};
+        data.forEach(row => {
+            const val = row[key] || '(ריק)';
+            if (!groups[val]) groups[val] = [];
+            groups[val].push(row);
+        });
+        return groups;
+    }
+
+    // ========================================
+    // RENDER FUNCTIONS
+    // ========================================
+    function renderAll() {
+        renderKPIs();
+        renderCharts();
+        renderBreakdowns();
+        renderCampaignBreakdown();
+        renderDataTable();
+    }
+
+    function renderKPIs() {
+        const s = calcStats(filteredData);
+        const grid = document.getElementById('kpi-grid');
+        grid.innerHTML = `
+            <div class="kpi-card">
+                <div class="kpi-label">סה"כ לידים</div>
+                <div class="kpi-value">${s.total.toLocaleString()}</div>
+            </div>
+            <div class="kpi-card green">
+                <div class="kpi-label">הגיעו לסניף</div>
+                <div class="kpi-value">${s.arrived.toLocaleString()}</div>
+                <div class="kpi-sub">${s.arrivalRate.toFixed(1)}% מהלידים</div>
+            </div>
+            <div class="kpi-card green">
+                <div class="kpi-label">רכשו</div>
+                <div class="kpi-value">${s.purchased.toLocaleString()}</div>
+                <div class="kpi-sub">${s.purchaseRate.toFixed(1)}% מהמגיעים</div>
+            </div>
+            <div class="kpi-card yellow">
+                <div class="kpi-label">הגיעו ולא רכשו</div>
+                <div class="kpi-value">${s.arrivedNotPurchased.toLocaleString()}</div>
+            </div>
+            <div class="kpi-card red">
+                <div class="kpi-label">ביטולים</div>
+                <div class="kpi-value">${s.cancelled.toLocaleString()}</div>
+                <div class="kpi-sub">מוכרן: ${s.cancelledBySeller} | לקוח: ${s.cancelledByCustomer}</div>
+            </div>
+            <div class="kpi-card red">
+                <div class="kpi-label">לא הגיעו</div>
+                <div class="kpi-value">${s.noShow.toLocaleString()}</div>
+            </div>
+            <div class="kpi-card purple">
+                <div class="kpi-label">הכנסות</div>
+                <div class="kpi-value">${s.revenue > 0 ? '₪' + Math.round(s.revenue).toLocaleString() : '₪0'}</div>
+                <div class="kpi-sub">ממוצע: ₪${Math.round(s.avgTransaction).toLocaleString()}</div>
+            </div>
+            <div class="kpi-card purple">
+                <div class="kpi-label">המרה כוללת</div>
+                <div class="kpi-value">${s.overallConversion.toFixed(1)}%</div>
+                <div class="kpi-sub">ליד → רכישה</div>
+            </div>
+        `;
+    }
+
+    function renderCharts() {
+        renderStatusChart();
+        renderBranchChart();
+        renderSourceChart();
+        renderMonthlyChart();
+    }
+
+    function destroyChart(id) {
+        if (charts[id]) { charts[id].destroy(); charts[id] = null; }
+    }
+
+    function renderStatusChart() {
+        destroyChart('status');
+        const groups = {};
+        filteredData.forEach(r => {
+            let cat;
+            if (isPurchased(r.status)) cat = 'הגיע ורכש';
+            else if (isArrivedNotPurchased(r.status)) cat = 'הגיע ולא רכש';
+            else if (isCancelledBySeller(r.status)) cat = 'ביטול מוכרן';
+            else if (isCancelledByCustomer(r.status)) cat = 'ביטול לקוח';
+            else if (isNoShow(r.status)) cat = 'לא הגיע';
+            else cat = r.status || 'אחר';
+            groups[cat] = (groups[cat] || 0) + 1;
+        });
+        const labels = Object.keys(groups);
+        const values = Object.values(groups);
+        const colors = labels.map(l => {
+            if (l === 'הגיע ורכש') return '#16a34a';
+            if (l === 'הגיע ולא רכש') return '#60a5fa';
+            if (l.includes('ביטול מוכרן')) return '#ef4444';
+            if (l.includes('ביטול לקוח')) return '#f97316';
+            if (l.includes('לא הגיע')) return '#eab308';
+            return '#94a3b8';
+        });
+
+        const ctx = document.getElementById('chart-status').getContext('2d');
+        charts['status'] = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 12 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = ((context.parsed / total) * 100).toFixed(1);
+                                return `${context.label}: ${context.parsed.toLocaleString()} (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderBranchChart() {
+        destroyChart('branch');
+        const groups = groupBy(filteredData, 'branch');
+        const entries = Object.entries(groups)
+            .map(([k, v]) => ({ name: k, total: v.length, arrived: v.filter(r => isArrived(r.status)).length, purchased: v.filter(r => isPurchased(r.status)).length }))
+            .sort((a, b) => b.total - a.total);
+
+        const ctx = document.getElementById('chart-branch').getContext('2d');
+        charts['branch'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: entries.map(e => e.name),
+                datasets: [
+                    { label: 'סה"כ', data: entries.map(e => e.total), backgroundColor: '#93c5fd' },
+                    { label: 'הגיעו', data: entries.map(e => e.arrived), backgroundColor: '#86efac' },
+                    { label: 'רכשו', data: entries.map(e => e.purchased), backgroundColor: '#16a34a' }
+                ]
+            },
+            options: {
+                responsive: true,
+                indexAxis: 'y',
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } },
+                scales: { x: { beginAtZero: true } }
+            }
+        });
+    }
+
+    function renderSourceChart() {
+        destroyChart('source');
+        const groups = groupBy(filteredData, 'source');
+        const entries = Object.entries(groups)
+            .map(([k, v]) => ({ name: k, total: v.length }))
+            .filter(e => e.name !== '(ריק)')
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 10);
+
+        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
+        const ctx = document.getElementById('chart-source').getContext('2d');
+        charts['source'] = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: entries.map(e => e.name),
+                datasets: [{ data: entries.map(e => e.total), backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 12 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+                                return `${ctx.label}: ${ctx.parsed.toLocaleString()} (${((ctx.parsed/total)*100).toFixed(1)}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderMonthlyChart() {
+        destroyChart('monthly');
+        const monthGroups = {};
+        filteredData.forEach(r => {
+            if (!r.schedulingDate) return;
+            const key = `${r.schedulingYear}-${String(r.schedulingMonth).padStart(2, '0')}`;
+            if (!monthGroups[key]) monthGroups[key] = { total: 0, arrived: 0, purchased: 0 };
+            monthGroups[key].total++;
+            if (isArrived(r.status)) monthGroups[key].arrived++;
+            if (isPurchased(r.status)) monthGroups[key].purchased++;
+        });
+
+        const months = Object.keys(monthGroups).sort();
+        const monthNames = { '01': 'ינו', '02': 'פבר', '03': 'מרץ', '04': 'אפר', '05': 'מאי', '06': 'יונ', '07': 'יול', '08': 'אוג', '09': 'ספט', '10': 'אוק', '11': 'נוב', '12': 'דצמ' };
+        const labels = months.map(m => {
+            const [y, mo] = m.split('-');
+            return `${monthNames[mo] || mo} ${y}`;
+        });
+
+        const ctx = document.getElementById('chart-monthly').getContext('2d');
+        charts['monthly'] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'סה"כ לידים', data: months.map(m => monthGroups[m].total), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true, tension: 0.3 },
+                    { label: 'הגיעו', data: months.map(m => monthGroups[m].arrived), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.3 },
+                    { label: 'רכשו', data: months.map(m => monthGroups[m].purchased), borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.1)', fill: true, tension: 0.3 }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+
+    // ========================================
+    // BREAKDOWN TABLES
+    // ========================================
+    function createBreakdownTable(data, groupKey, containerId) {
+        const groups = groupBy(data, groupKey);
+        const rows = Object.entries(groups).map(([name, items]) => {
+            const s = calcStats(items);
+            return { name, ...s };
+        }).sort((a, b) => b.total - a.total);
+
+        const totals = calcStats(data);
+
+        let html = `<table>
+            <thead><tr>
+                <th>שם</th>
+                <th>סה"כ לידים</th>
+                <th>הגיעו</th>
+                <th>רכשו</th>
+                <th>לא רכשו</th>
+                <th>ביטולים</th>
+                <th>לא הגיעו</th>
+                <th>% הגעה</th>
+                <th>% רכישה (מהמגיעים)</th>
+                <th>% המרה כוללת</th>
+                <th>הכנסות</th>
+                <th>ממוצע עסקה</th>
+            </tr></thead><tbody>`;
+
+        rows.forEach(r => {
+            html += `<tr>
+                <td><strong>${r.name}</strong></td>
+                <td>${r.total.toLocaleString()}</td>
+                <td>${r.arrived.toLocaleString()}</td>
+                <td>${r.purchased.toLocaleString()}</td>
+                <td>${r.arrivedNotPurchased.toLocaleString()}</td>
+                <td>${r.cancelled.toLocaleString()}</td>
+                <td>${r.noShow.toLocaleString()}</td>
+                <td>${r.arrivalRate.toFixed(1)}%</td>
+                <td>${r.purchaseRate.toFixed(1)}%</td>
+                <td>${r.overallConversion.toFixed(1)}%</td>
+                <td>₪${Math.round(r.revenue).toLocaleString()}</td>
+                <td>₪${Math.round(r.avgTransaction).toLocaleString()}</td>
+            </tr>`;
+        });
+
+        // Total row
+        html += `<tr style="background:#f0f9ff; font-weight:700;">
+            <td>סה"כ</td>
+            <td>${totals.total.toLocaleString()}</td>
+            <td>${totals.arrived.toLocaleString()}</td>
+            <td>${totals.purchased.toLocaleString()}</td>
+            <td>${totals.arrivedNotPurchased.toLocaleString()}</td>
+            <td>${totals.cancelled.toLocaleString()}</td>
+            <td>${totals.noShow.toLocaleString()}</td>
+            <td>${totals.arrivalRate.toFixed(1)}%</td>
+            <td>${totals.purchaseRate.toFixed(1)}%</td>
+            <td>${totals.overallConversion.toFixed(1)}%</td>
+            <td>₪${Math.round(totals.revenue).toLocaleString()}</td>
+            <td>₪${Math.round(totals.avgTransaction).toLocaleString()}</td>
+        </tr>`;
+
+        html += '</tbody></table>';
+        document.getElementById(containerId).innerHTML = html;
+    }
+
+    function renderBreakdowns() {
+        createBreakdownTable(filteredData, 'handler', 'breakdown-handler');
+        createBreakdownTable(filteredData, 'branch', 'breakdown-branch');
+        createBreakdownTable(filteredData, 'source', 'breakdown-source');
+        createBreakdownTable(filteredData, 'optometrist', 'breakdown-optometrist');
+    }
+
+    function renderCampaignBreakdown() {
+        const searchText = (document.getElementById('campaign-search')?.value || '').toLowerCase();
+        const groups = groupBy(filteredData, 'campaign');
+        let rows = Object.entries(groups).map(([name, items]) => {
+            const s = calcStats(items);
+            return { name, ...s };
+        }).sort((a, b) => b.total - a.total);
+
+        if (searchText) {
+            rows = rows.filter(r => r.name.toLowerCase().includes(searchText));
+        }
+
+        const totals = calcStats(filteredData);
+
+        let html = `<table>
+            <thead><tr>
+                <th>קמפיין</th>
+                <th>סה"כ לידים</th>
+                <th>הגיעו</th>
+                <th>רכשו</th>
+                <th>לא רכשו</th>
+                <th>ביטולים</th>
+                <th>לא הגיעו</th>
+                <th>% הגעה</th>
+                <th>% רכישה</th>
+                <th>% המרה</th>
+                <th>הכנסות</th>
+                <th>ממוצע עסקה</th>
+            </tr></thead><tbody>`;
+
+        rows.forEach(r => {
+            html += `<tr>
+                <td><strong>${r.name}</strong></td>
+                <td>${r.total.toLocaleString()}</td>
+                <td>${r.arrived.toLocaleString()}</td>
+                <td>${r.purchased.toLocaleString()}</td>
+                <td>${r.arrivedNotPurchased.toLocaleString()}</td>
+                <td>${r.cancelled.toLocaleString()}</td>
+                <td>${r.noShow.toLocaleString()}</td>
+                <td>${r.arrivalRate.toFixed(1)}%</td>
+                <td>${r.purchaseRate.toFixed(1)}%</td>
+                <td>${r.overallConversion.toFixed(1)}%</td>
+                <td>₪${Math.round(r.revenue).toLocaleString()}</td>
+                <td>₪${Math.round(r.avgTransaction).toLocaleString()}</td>
+            </tr>`;
+        });
+
+        if (!searchText) {
+            html += `<tr style="background:#f0f9ff; font-weight:700;">
+                <td>סה"כ</td>
+                <td>${totals.total.toLocaleString()}</td>
+                <td>${totals.arrived.toLocaleString()}</td>
+                <td>${totals.purchased.toLocaleString()}</td>
+                <td>${totals.arrivedNotPurchased.toLocaleString()}</td>
+                <td>${totals.cancelled.toLocaleString()}</td>
+                <td>${totals.noShow.toLocaleString()}</td>
+                <td>${totals.arrivalRate.toFixed(1)}%</td>
+                <td>${totals.purchaseRate.toFixed(1)}%</td>
+                <td>${totals.overallConversion.toFixed(1)}%</td>
+                <td>₪${Math.round(totals.revenue).toLocaleString()}</td>
+                <td>₪${Math.round(totals.avgTransaction).toLocaleString()}</td>
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        document.getElementById('breakdown-campaign').innerHTML = html;
+    }
+
+    // ========================================
+    // DATA TABLE
+    // ========================================
+    const DATA_COLUMNS = [
+        { key: 'id', label: '#' },
+        { key: 'examDateStr', label: 'תאריך בדיקה' },
+        { key: 'schedulingDateStr', label: 'תאריך קביעה' },
+        { key: 'customerName', label: 'שם הלקוח' },
+        { key: 'status', label: 'סטטוס' },
+        { key: 'reason', label: 'סיבה' },
+        { key: 'branch', label: 'סניף' },
+        { key: 'handler', label: 'מטפל' },
+        { key: 'optometrist', label: 'אופטומטריסט' },
+        { key: 'examType', label: 'סוג בדיקה' },
+        { key: 'examSource', label: 'מקור בדיקה' },
+        { key: 'campaign', label: 'קמפיין' },
+        { key: 'media', label: 'מדיה' },
+        { key: 'source', label: 'מקור' },
+        { key: 'transactionAmount', label: 'סכום', format: v => v ? '₪' + v.toLocaleString() : '' },
+        { key: 'orders', label: 'הזמנות' },
+        { key: 'russian', label: 'רוסי', format: v => v ? 'כן' : 'לא' },
+        { key: 'soldier', label: 'חייל', format: v => v ? 'כן' : 'לא' },
+        { key: 'returningCustomer', label: 'לקוח חוזר', format: v => v ? 'כן' : '' },
+    ];
+
+    function renderDataTable() {
+        const searchText = (document.getElementById('data-search')?.value || '').toLowerCase();
+        let data = filteredData;
+
+        if (searchText) {
+            data = data.filter(row => {
+                return DATA_COLUMNS.some(col => {
+                    const val = col.format ? col.format(row[col.key]) : String(row[col.key] || '');
+                    return val.toLowerCase().includes(searchText);
+                });
+            });
+        }
+
+        // Sort
+        if (dataSortCol !== null) {
+            const col = DATA_COLUMNS[dataSortCol];
+            data = [...data].sort((a, b) => {
+                let va = a[col.key], vb = b[col.key];
+                if (typeof va === 'number' && typeof vb === 'number') {
+                    return dataSortDir === 'asc' ? va - vb : vb - va;
+                }
+                va = String(va || '');
+                vb = String(vb || '');
+                const cmp = va.localeCompare(vb, 'he');
+                return dataSortDir === 'asc' ? cmp : -cmp;
+            });
+        }
+
+        document.getElementById('data-count').textContent = `${data.length.toLocaleString()} רשומות`;
+
+        // Pagination
+        const totalPages = Math.ceil(data.length / DATA_PER_PAGE);
+        if (dataPage > totalPages) dataPage = totalPages || 1;
+        const startIdx = (dataPage - 1) * DATA_PER_PAGE;
+        const pageData = data.slice(startIdx, startIdx + DATA_PER_PAGE);
+
+        let html = '<table><thead><tr>';
+        DATA_COLUMNS.forEach((col, i) => {
+            const sorted = dataSortCol === i;
+            const icon = sorted ? (dataSortDir === 'asc' ? '&#9650;' : '&#9660;') : '&#8645;';
+            html += `<th class="${sorted ? 'sorted' : ''}" onclick="sortDataTable(${i})"><span class="sort-icon">${icon}</span>${col.label}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        pageData.forEach(row => {
+            html += '<tr>';
+            DATA_COLUMNS.forEach(col => {
+                let val = col.format ? col.format(row[col.key]) : (row[col.key] ?? '');
+                if (col.key === 'status') {
+                    val = `<span class="status-badge ${getStatusClass(row.status)}">${val}</span>`;
+                }
+                html += `<td>${val}</td>`;
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        document.getElementById('data-table').innerHTML = html;
+
+        // Render pagination
+        renderPagination(totalPages);
+    }
+
+    function sortDataTable(colIdx) {
+        if (dataSortCol === colIdx) {
+            dataSortDir = dataSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            dataSortCol = colIdx;
+            dataSortDir = 'asc';
+        }
+        renderDataTable();
+    }
+
+    function renderPagination(totalPages) {
+        const el = document.getElementById('pagination');
+        if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+        let html = `<button ${dataPage === 1 ? 'disabled' : ''} onclick="goToPage(${dataPage - 1})">הקודם</button>`;
+
+        const maxShow = 7;
+        let start = Math.max(1, dataPage - Math.floor(maxShow / 2));
+        let end = Math.min(totalPages, start + maxShow - 1);
+        if (end - start < maxShow - 1) start = Math.max(1, end - maxShow + 1);
+
+        if (start > 1) {
+            html += `<button onclick="goToPage(1)">1</button>`;
+            if (start > 2) html += `<button disabled>...</button>`;
+        }
+        for (let i = start; i <= end; i++) {
+            html += `<button class="${i === dataPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+        }
+        if (end < totalPages) {
+            if (end < totalPages - 1) html += `<button disabled>...</button>`;
+            html += `<button onclick="goToPage(${totalPages})">${totalPages}</button>`;
+        }
+
+        html += `<button ${dataPage === totalPages ? 'disabled' : ''} onclick="goToPage(${dataPage + 1})">הבא</button>`;
+        el.innerHTML = html;
+    }
+
+    function goToPage(page) {
+        dataPage = page;
+        renderDataTable();
+    }
+
+    // ========================================
+    // EXPORT
+    // ========================================
+    function exportCSV() {
+        const searchText = (document.getElementById('data-search')?.value || '').toLowerCase();
+        let data = filteredData;
+        if (searchText) {
+            data = data.filter(row => {
+                return DATA_COLUMNS.some(col => {
+                    const val = col.format ? col.format(row[col.key]) : String(row[col.key] || '');
+                    return val.toLowerCase().includes(searchText);
+                });
+            });
+        }
+
+        // BOM for Excel Hebrew support
+        let csv = '\ufeff';
+        csv += DATA_COLUMNS.map(c => `"${c.label}"`).join(',') + '\n';
+        data.forEach(row => {
+            csv += DATA_COLUMNS.map(col => {
+                let val = col.format ? col.format(row[col.key]) : (row[col.key] ?? '');
+                return `"${String(val).replace(/"/g, '""')}"`;
+            }).join(',') + '\n';
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `leads_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function getExportData() {
+        const searchText = (document.getElementById('data-search')?.value || '').toLowerCase();
+        let data = filteredData;
+        if (searchText) {
+            data = data.filter(row => {
+                return DATA_COLUMNS.some(col => {
+                    const val = col.format ? col.format(row[col.key]) : String(row[col.key] || '');
+                    return val.toLowerCase().includes(searchText);
+                });
+            });
+        }
+        return data;
+    }
+
+    function exportExcel() {
+        const data = getExportData();
+
+        // Build rows array with headers
+        const headers = DATA_COLUMNS.map(c => c.label);
+        const rows = data.map(row =>
+            DATA_COLUMNS.map(col => {
+                if (col.key === 'transactionAmount') return row[col.key] || '';
+                if (col.key === 'russian') return row[col.key] ? 'כן' : 'לא';
+                if (col.key === 'soldier') return row[col.key] ? 'כן' : 'לא';
+                if (col.key === 'returningCustomer') return row[col.key] ? 'כן' : '';
+                return row[col.key] ?? '';
+            })
+        );
+
+        const wsData = [headers, ...rows];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+        // Auto-size columns
+        const colWidths = headers.map((h, i) => {
+            let max = h.length;
+            rows.forEach(r => { const len = String(r[i] || '').length; if (len > max) max = len; });
+            return { wch: Math.min(max + 2, 50) };
+        });
+        ws['!cols'] = colWidths;
+
+        // Set number format for transaction amount column
+        const amountColIdx = DATA_COLUMNS.findIndex(c => c.key === 'transactionAmount');
+        if (amountColIdx >= 0) {
+            for (let r = 1; r <= rows.length; r++) {
+                const cellRef = XLSX.utils.encode_cell({ r, c: amountColIdx });
+                if (ws[cellRef] && ws[cellRef].v) {
+                    ws[cellRef].t = 'n';
+                    ws[cellRef].z = '#,##0';
+                }
+            }
+        }
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'לידים');
+
+        // Add summary sheet
+        const stats = calcStats(data);
+        const summaryData = [
+            ['סיכום נתונים מסוננים'],
+            [],
+            ['מדד', 'ערך'],
+            ['סה"כ לידים', stats.total],
+            ['הגיעו לסניף', stats.arrived],
+            ['רכשו', stats.purchased],
+            ['הגיעו ולא רכשו', stats.arrivedNotPurchased],
+            ['ביטולים', stats.cancelled],
+            ['ביטול מוכרן', stats.cancelledBySeller],
+            ['ביטול לקוח', stats.cancelledByCustomer],
+            ['לא הגיעו', stats.noShow],
+            ['הכנסות', Math.round(stats.revenue)],
+            ['ממוצע עסקה', Math.round(stats.avgTransaction)],
+            ['% הגעה', stats.arrivalRate.toFixed(1) + '%'],
+            ['% רכישה (מהמגיעים)', stats.purchaseRate.toFixed(1) + '%'],
+            ['% המרה כוללת', stats.overallConversion.toFixed(1) + '%'],
+        ];
+        const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+        wsSummary['!cols'] = [{ wch: 25 }, { wch: 15 }];
+        XLSX.utils.book_append_sheet(wb, wsSummary, 'סיכום');
+
+        // Add breakdown by handler sheet
+        const handlerGroups = groupBy(data, 'handler');
+        const handlerHeaders = ['מטפל', 'סה"כ לידים', 'הגיעו', 'רכשו', 'לא רכשו', 'ביטולים', 'לא הגיעו', '% הגעה', '% רכישה', '% המרה', 'הכנסות', 'ממוצע עסקה'];
+        const handlerRows = Object.entries(handlerGroups)
+            .map(([name, items]) => {
+                const s = calcStats(items);
+                return [name, s.total, s.arrived, s.purchased, s.arrivedNotPurchased, s.cancelled, s.noShow,
+                    s.arrivalRate.toFixed(1) + '%', s.purchaseRate.toFixed(1) + '%', s.overallConversion.toFixed(1) + '%',
+                    Math.round(s.revenue), Math.round(s.avgTransaction)];
+            })
+            .sort((a, b) => b[1] - a[1]);
+        const wsHandler = XLSX.utils.aoa_to_sheet([handlerHeaders, ...handlerRows]);
+        wsHandler['!cols'] = handlerHeaders.map(() => ({ wch: 14 }));
+        wsHandler['!cols'][0] = { wch: 20 };
+        XLSX.utils.book_append_sheet(wb, wsHandler, 'לפי מטפל');
+
+        // Add breakdown by branch sheet
+        const branchGroups = groupBy(data, 'branch');
+        const branchRows = Object.entries(branchGroups)
+            .map(([name, items]) => {
+                const s = calcStats(items);
+                return [name, s.total, s.arrived, s.purchased, s.arrivedNotPurchased, s.cancelled, s.noShow,
+                    s.arrivalRate.toFixed(1) + '%', s.purchaseRate.toFixed(1) + '%', s.overallConversion.toFixed(1) + '%',
+                    Math.round(s.revenue), Math.round(s.avgTransaction)];
+            })
+            .sort((a, b) => b[1] - a[1]);
+        const wsBranch = XLSX.utils.aoa_to_sheet([handlerHeaders.map((h,i) => i === 0 ? 'סניף' : h), ...branchRows]);
+        wsBranch['!cols'] = handlerHeaders.map(() => ({ wch: 14 }));
+        XLSX.utils.book_append_sheet(wb, wsBranch, 'לפי סניף');
+
+        // Add breakdown by campaign sheet
+        const campGroups = groupBy(data, 'campaign');
+        const campRows = Object.entries(campGroups)
+            .map(([name, items]) => {
+                const s = calcStats(items);
+                return [name, s.total, s.arrived, s.purchased, s.arrivedNotPurchased, s.cancelled, s.noShow,
+                    s.arrivalRate.toFixed(1) + '%', s.purchaseRate.toFixed(1) + '%', s.overallConversion.toFixed(1) + '%',
+                    Math.round(s.revenue), Math.round(s.avgTransaction)];
+            })
+            .sort((a, b) => b[1] - a[1]);
+        const wsCamp = XLSX.utils.aoa_to_sheet([handlerHeaders.map((h,i) => i === 0 ? 'קמפיין' : h), ...campRows]);
+        wsCamp['!cols'] = handlerHeaders.map(() => ({ wch: 14 }));
+        wsCamp['!cols'][0] = { wch: 60 };
+        XLSX.utils.book_append_sheet(wb, wsCamp, 'לפי קמפיין');
+
+        XLSX.writeFile(wb, `leads_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+
+    function exportCampaignsExcel() {
+        const searchText = (document.getElementById('campaign-search')?.value || '').toLowerCase();
+        const groups = groupBy(filteredData, 'campaign');
+        let rows = Object.entries(groups).map(([name, items]) => {
+            const s = calcStats(items);
+            return {
+                name, total: s.total, arrived: s.arrived, purchased: s.purchased,
+                arrivedNotPurchased: s.arrivedNotPurchased, cancelled: s.cancelled, noShow: s.noShow,
+                arrivalRate: s.arrivalRate, purchaseRate: s.purchaseRate, overallConversion: s.overallConversion,
+                revenue: s.revenue, avgTransaction: s.avgTransaction
+            };
+        }).sort((a, b) => b.total - a.total);
+
+        if (searchText) {
+            rows = rows.filter(r => r.name.toLowerCase().includes(searchText));
+        }
+
+        const headers = ['קמפיין', 'סה"כ לידים', 'הגיעו', 'רכשו', 'לא רכשו', 'ביטולים', 'לא הגיעו', '% הגעה', '% רכישה', '% המרה', 'הכנסות', 'ממוצע עסקה'];
+        const xlRows = rows.map(r => [
+            r.name, r.total, r.arrived, r.purchased, r.arrivedNotPurchased, r.cancelled, r.noShow,
+            r.arrivalRate.toFixed(1) + '%', r.purchaseRate.toFixed(1) + '%', r.overallConversion.toFixed(1) + '%',
+            Math.round(r.revenue), Math.round(r.avgTransaction)
+        ]);
+
+        // Total row
+        const totals = calcStats(filteredData);
+        xlRows.push([
+            'סה"כ', totals.total, totals.arrived, totals.purchased, totals.arrivedNotPurchased, totals.cancelled, totals.noShow,
+            totals.arrivalRate.toFixed(1) + '%', totals.purchaseRate.toFixed(1) + '%', totals.overallConversion.toFixed(1) + '%',
+            Math.round(totals.revenue), Math.round(totals.avgTransaction)
+        ]);
+
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...xlRows]);
+        ws['!cols'] = headers.map((_, i) => ({ wch: i === 0 ? 60 : 14 }));
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'קמפיינים');
+        XLSX.writeFile(wb, `campaigns_export_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+
+    // ========================================
+    // TABS
+    // ========================================
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tabId));
+    }
+
+    // ========================================
+    // INITIALIZATION
+    // ========================================
+    function initApp(results) {
+        processedData = results.data
+            .filter(row => row['#'] && row['#'].trim() !== '')
+            .map(processRow);
+
+        // Init multi-selects
+        const msConfigs = [
+            { id: 'filter-branch', key: 'branch' },
+            { id: 'filter-handler', key: 'handler' },
+            { id: 'filter-status', key: 'status' },
+            { id: 'filter-optometrist', key: 'optometrist' },
+            { id: 'filter-examType', key: 'examType' },
+            { id: 'filter-examSource', key: 'examSource' },
+            { id: 'filter-source', key: 'source' },
+            { id: 'filter-media', key: 'media' },
+            { id: 'filter-campaign', key: 'campaign' },
+        ];
+
+        msConfigs.forEach(({ id, key }) => {
+            const ms = new MultiSelect(id);
+            const values = [...new Set(processedData.map(r => r[key]).filter(v => v !== ''))];
+            ms.setOptions(values);
+            multiSelects[id] = ms;
+        });
+
+        // Set date range defaults
+        const dates = processedData.map(r => r.schedulingDate).filter(Boolean);
+        if (dates.length > 0) {
+            const minDate = new Date(Math.min(...dates));
+            const maxDate = new Date(Math.max(...dates));
+            document.getElementById('date-from').value = `${minDate.getFullYear()}-${String(minDate.getMonth() + 1).padStart(2, '0')}`;
+            document.getElementById('date-to').value = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}`;
+            document.getElementById('date-from-day').value = `${minDate.getFullYear()}-${String(minDate.getMonth() + 1).padStart(2, '0')}-${String(minDate.getDate()).padStart(2, '0')}`;
+            document.getElementById('date-to-day').value = `${maxDate.getFullYear()}-${String(maxDate.getMonth() + 1).padStart(2, '0')}-${String(maxDate.getDate()).padStart(2, '0')}`;
+        }
+
+        // Init toggle buttons
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const filter = this.dataset.filter;
+                const value = this.dataset.value;
+                toggleFilters[filter] = value;
+                this.closest('.toggle-group').querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Filter toggle
+        document.getElementById('filter-toggle').addEventListener('click', function () {
+            const body = document.getElementById('filter-body');
+            const arrow = document.getElementById('filter-arrow');
+            body.classList.toggle('collapsed');
+            arrow.classList.toggle('collapsed');
+        });
+
+        // Show app
+        document.getElementById('upload-area').style.display = 'none';
+        document.getElementById('app-content').style.display = 'block';
+        document.getElementById('file-info').textContent = `${processedData.length.toLocaleString()} רשומות נטענו`;
+
+        // Initial render
+        applyFilters();
+    }
+
+    // ========================================
+    // FILE UPLOAD HANDLING
+    // ========================================
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) handleFile(file);
+    });
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) handleFile(file);
+    });
+
+    function handleFile(file) {
+        uploadArea.innerHTML = '<div class="loading"><div class="spinner"></div><p style="margin-top:12px;">טוען וממפה נתונים...</p></div>';
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            encoding: 'UTF-8',
+            complete: function (results) {
+                if (results.errors.length > 0) {
+                    console.warn('CSV parsing warnings:', results.errors);
+                }
+                initApp(results);
+            },
+            error: function (err) {
+                uploadArea.innerHTML = `<div style="color:var(--danger);">שגיאה בקריאת הקובץ: ${err.message}</div>`;
+            }
+        });
+    }
+    </script>
+</body>
+</html>
