@@ -485,6 +485,66 @@
 
         .highlight-row td { background: #fefce8 !important; }
 
+        /* Column Picker */
+        .col-picker-toggle {
+            background: #f1f5f9;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .col-picker-toggle:hover { background: #e2e8f0; }
+        .col-picker-panel {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: var(--shadow-lg);
+            padding: 14px;
+            margin-bottom: 12px;
+            display: none;
+        }
+        .col-picker-panel.visible { display: block; }
+        .col-picker-panel h4 { font-size: 13px; margin-bottom: 10px; color: var(--text-secondary); }
+        .col-picker-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .col-chip {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: white;
+            color: var(--text-secondary);
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .col-chip.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .col-picker-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .col-picker-actions a {
+            color: var(--primary);
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .col-picker-actions a:hover { text-decoration: underline; }
+
         /* Tooltip */
         .info-tip {
             display: inline-block;
@@ -691,8 +751,17 @@
                     <input type="text" class="search-box" id="data-search" placeholder="חיפוש חופשי בכל השדות..." oninput="renderDataTable()">
                     <div style="display:flex; gap:8px; align-items:center;">
                         <span class="data-count" id="data-count"></span>
+                        <button class="col-picker-toggle" onclick="toggleColumnPicker()">&#9881; עמודות</button>
                         <button class="btn btn-success" onclick="exportExcel()">ייצוא Excel</button>
                         <button class="btn btn-secondary" onclick="exportCSV()">ייצוא CSV</button>
+                    </div>
+                </div>
+                <div class="col-picker-panel" id="col-picker-panel">
+                    <h4>בחר עמודות להצגה ולייצוא:</h4>
+                    <div class="col-picker-grid" id="col-picker-grid"></div>
+                    <div class="col-picker-actions">
+                        <a onclick="setAllColumns(true)">בחר הכל</a>
+                        <a onclick="setAllColumns(false)">נקה הכל</a>
                     </div>
                 </div>
                 <div class="table-wrapper" id="data-table"></div>
@@ -1525,6 +1594,39 @@
         { key: 'returningCustomer', label: 'לקוח חוזר', format: v => v ? 'כן' : '' },
     ];
 
+    // Column visibility - all visible by default
+    const columnVisible = {};
+    DATA_COLUMNS.forEach(c => columnVisible[c.key] = true);
+
+    function getVisibleColumns() {
+        return DATA_COLUMNS.filter(c => columnVisible[c.key]);
+    }
+
+    function toggleColumnPicker() {
+        const panel = document.getElementById('col-picker-panel');
+        panel.classList.toggle('visible');
+        if (panel.classList.contains('visible')) renderColumnPicker();
+    }
+
+    function renderColumnPicker() {
+        const grid = document.getElementById('col-picker-grid');
+        grid.innerHTML = DATA_COLUMNS.map(col =>
+            `<span class="col-chip ${columnVisible[col.key] ? 'active' : ''}" onclick="toggleColumn('${col.key}')">${col.label}</span>`
+        ).join('');
+    }
+
+    function toggleColumn(key) {
+        columnVisible[key] = !columnVisible[key];
+        renderColumnPicker();
+        renderDataTable();
+    }
+
+    function setAllColumns(state) {
+        DATA_COLUMNS.forEach(c => columnVisible[c.key] = state);
+        renderColumnPicker();
+        renderDataTable();
+    }
+
     function renderDataTable() {
         const searchText = (document.getElementById('data-search')?.value || '').toLowerCase();
         let data = filteredData;
@@ -1561,17 +1663,19 @@
         const startIdx = (dataPage - 1) * DATA_PER_PAGE;
         const pageData = data.slice(startIdx, startIdx + DATA_PER_PAGE);
 
+        const visCols = getVisibleColumns();
         let html = '<table><thead><tr>';
-        DATA_COLUMNS.forEach((col, i) => {
-            const sorted = dataSortCol === i;
+        visCols.forEach((col) => {
+            const origIdx = DATA_COLUMNS.indexOf(col);
+            const sorted = dataSortCol === origIdx;
             const icon = sorted ? (dataSortDir === 'asc' ? '&#9650;' : '&#9660;') : '&#8645;';
-            html += `<th class="${sorted ? 'sorted' : ''}" onclick="sortDataTable(${i})"><span class="sort-icon">${icon}</span>${col.label}</th>`;
+            html += `<th class="${sorted ? 'sorted' : ''}" onclick="sortDataTable(${origIdx})"><span class="sort-icon">${icon}</span>${col.label}</th>`;
         });
         html += '</tr></thead><tbody>';
 
         pageData.forEach(row => {
             html += '<tr>';
-            DATA_COLUMNS.forEach(col => {
+            visCols.forEach(col => {
                 let val = col.format ? col.format(row[col.key]) : (row[col.key] ?? '');
                 if (col.key === 'status') {
                     val = `<span class="status-badge ${getStatusClass(row.status)}">${val}</span>`;
@@ -1646,10 +1750,11 @@
         }
 
         // BOM for Excel Hebrew support
+        const visCols = getVisibleColumns();
         let csv = '\ufeff';
-        csv += DATA_COLUMNS.map(c => `"${c.label}"`).join(',') + '\n';
+        csv += visCols.map(c => `"${c.label}"`).join(',') + '\n';
         data.forEach(row => {
-            csv += DATA_COLUMNS.map(col => {
+            csv += visCols.map(col => {
                 let val = col.format ? col.format(row[col.key]) : (row[col.key] ?? '');
                 return `"${String(val).replace(/"/g, '""')}"`;
             }).join(',') + '\n';
@@ -1680,11 +1785,12 @@
 
     function exportExcel() {
         const data = getExportData();
+        const visCols = getVisibleColumns();
 
         // Build rows array with headers
-        const headers = DATA_COLUMNS.map(c => c.label);
+        const headers = visCols.map(c => c.label);
         const rows = data.map(row =>
-            DATA_COLUMNS.map(col => {
+            visCols.map(col => {
                 if (col.key === 'transactionAmount') return row[col.key] || '';
                 if (col.key === 'russian') return row[col.key] ? 'כן' : 'לא';
                 if (col.key === 'soldier') return row[col.key] ? 'כן' : 'לא';
@@ -1705,7 +1811,7 @@
         ws['!cols'] = colWidths;
 
         // Set number format for transaction amount column
-        const amountColIdx = DATA_COLUMNS.findIndex(c => c.key === 'transactionAmount');
+        const amountColIdx = visCols.findIndex(c => c.key === 'transactionAmount');
         if (amountColIdx >= 0) {
             for (let r = 1; r <= rows.length; r++) {
                 const cellRef = XLSX.utils.encode_cell({ r, c: amountColIdx });
