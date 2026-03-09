@@ -545,6 +545,65 @@
         }
         .col-picker-actions a:hover { text-decoration: underline; }
 
+        /* Templates */
+        .templates-section {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+        .templates-section h4 { font-size: 13px; margin-bottom: 8px; color: var(--text-secondary); }
+        .templates-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .template-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid var(--primary);
+            background: var(--primary-light);
+            color: var(--primary);
+            transition: all 0.15s;
+            user-select: none;
+            font-weight: 600;
+        }
+        .template-chip:hover { background: var(--primary); color: white; }
+        .template-chip .del-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            font-size: 11px;
+            line-height: 1;
+            background: rgba(0,0,0,0.15);
+            color: inherit;
+            margin-right: -4px;
+            cursor: pointer;
+        }
+        .template-chip:hover .del-btn { background: rgba(255,255,255,0.3); }
+        .save-template-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px dashed var(--border);
+            background: white;
+            color: var(--text-secondary);
+            transition: all 0.15s;
+        }
+        .save-template-btn:hover { border-color: var(--primary); color: var(--primary); }
+
         /* Tooltip */
         .info-tip {
             display: inline-block;
@@ -762,6 +821,10 @@
                     <div class="col-picker-actions">
                         <a onclick="setAllColumns(true)">בחר הכל</a>
                         <a onclick="setAllColumns(false)">נקה הכל</a>
+                    </div>
+                    <div class="templates-section">
+                        <h4>תבניות שמורות:</h4>
+                        <div class="templates-row" id="templates-row"></div>
                     </div>
                 </div>
                 <div class="table-wrapper" id="data-table"></div>
@@ -1605,7 +1668,10 @@
     function toggleColumnPicker() {
         const panel = document.getElementById('col-picker-panel');
         panel.classList.toggle('visible');
-        if (panel.classList.contains('visible')) renderColumnPicker();
+        if (panel.classList.contains('visible')) {
+            renderColumnPicker();
+            renderTemplates();
+        }
     }
 
     function renderColumnPicker() {
@@ -1625,6 +1691,64 @@
         DATA_COLUMNS.forEach(c => columnVisible[c.key] = state);
         renderColumnPicker();
         renderDataTable();
+    }
+
+    // ========================================
+    // TEMPLATES
+    // ========================================
+    function getTemplates() {
+        try {
+            return JSON.parse(localStorage.getItem('leads_analyzer_templates') || '[]');
+        } catch { return []; }
+    }
+
+    function saveTemplates(templates) {
+        localStorage.setItem('leads_analyzer_templates', JSON.stringify(templates));
+    }
+
+    function renderTemplates() {
+        const row = document.getElementById('templates-row');
+        if (!row) return;
+        const templates = getTemplates();
+        let html = templates.map((t, i) =>
+            `<span class="template-chip" onclick="loadTemplate(${i})" title="לחץ לטעינה: ${t.columns.length} עמודות">${t.name}<span class="del-btn" onclick="event.stopPropagation(); deleteTemplate(${i})">✕</span></span>`
+        ).join('');
+        html += `<button class="save-template-btn" onclick="saveNewTemplate()">+ שמור תבנית</button>`;
+        row.innerHTML = html;
+    }
+
+    function saveNewTemplate() {
+        const activeCols = DATA_COLUMNS.filter(c => columnVisible[c.key]).map(c => c.key);
+        if (activeCols.length === 0) {
+            alert('אי אפשר לשמור תבנית ללא עמודות. בחר לפחות עמודה אחת.');
+            return;
+        }
+        const name = prompt('שם התבנית:');
+        if (!name || !name.trim()) return;
+        const templates = getTemplates();
+        templates.push({ name: name.trim(), columns: activeCols });
+        saveTemplates(templates);
+        renderTemplates();
+    }
+
+    function loadTemplate(idx) {
+        const templates = getTemplates();
+        if (!templates[idx]) return;
+        const activeCols = templates[idx].columns;
+        DATA_COLUMNS.forEach(c => {
+            columnVisible[c.key] = activeCols.includes(c.key);
+        });
+        renderColumnPicker();
+        renderDataTable();
+    }
+
+    function deleteTemplate(idx) {
+        const templates = getTemplates();
+        if (!templates[idx]) return;
+        if (!confirm(`למחוק את התבנית "${templates[idx].name}"?`)) return;
+        templates.splice(idx, 1);
+        saveTemplates(templates);
+        renderTemplates();
     }
 
     function renderDataTable() {
